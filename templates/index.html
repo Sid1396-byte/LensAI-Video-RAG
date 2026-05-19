@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimodal Video RAG</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0f172a; --sidebar-bg: #1e293b; --text-main: #f8fafc;
+            --text-muted: #94a3b8; --primary: #3b82f6; --primary-hover: #2563eb;
+            --border: #334155; --msg-user: #2563eb; --msg-ai: #1e293b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; scroll-behavior: smooth; }
+        body { display: flex; height: 100vh; background: var(--bg-color); color: var(--text-main); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .sidebar { width: 340px; background: var(--sidebar-bg); border-right: 1px solid var(--border); padding: 24px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.2); z-index: 10; }
+        .sidebar h2 { font-size: 1.3rem; margin-bottom: 8px; color: #fff; font-weight: 700; }
+        .input-group { display: flex; flex-direction: column; gap: 8px; }
+        label { font-size: 0.9rem; color: var(--text-muted); font-weight: 500; }
+        input[type="password"], input[type="file"] { padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-color); color: white; width: 100%; outline: none; transition: 0.2s; }
+        
+        .checkbox-group { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #cbd5e1; cursor: pointer; }
+        .checkbox-group input { width: 16px; height: 16px; cursor: pointer; }
+
+        button { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; display: flex; justify-content: center; align-items: center; gap: 10px; }
+        button:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
+        button:disabled { background: var(--border); cursor: not-allowed; opacity: 0.7; }
+
+        .terminal-box { background: #000; border-radius: 8px; border: 1px solid var(--border); padding: 12px; font-family: 'Courier New', monospace; font-size: 0.8rem; color: #4ade80; height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.5); }
+        .terminal-box span { animation: fadeIn 0.3s ease-in-out; }
+
+        .main-content { flex: 1; display: flex; flex-direction: column; position: relative; }
+        .tabs { display: flex; border-bottom: 1px solid var(--border); background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px); }
+        .tab { padding: 16px 24px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-muted); font-weight: 500; transition: 0.2s; }
+        .tab:hover { color: white; background: rgba(255,255,255,0.05); }
+        .tab.active { border-bottom-color: var(--primary); color: white; font-weight: 600; }
+        .tab-content { flex: 1; display: none; padding: 24px; overflow-y: auto; }
+        .tab-content.active { display: flex; flex-direction: column; animation: fadeIn 0.4s ease-out; }
+
+        .chat-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; padding-right: 10px; }
+        .message { max-width: 80%; padding: 16px 20px; border-radius: 12px; line-height: 1.6; font-size: 0.95rem; animation: fadeIn 0.3s ease-out; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .message.user { background: var(--primary); align-self: flex-end; border-bottom-right-radius: 2px; color: white; white-space: pre-wrap; }
+        .message.assistant { background: var(--msg-ai); border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 2px; }
+        .message img { max-width: 100%; border-radius: 8px; margin-top: 12px; border: 1px solid var(--border); display: block; animation: fadeIn 0.5s ease-in; }
+        
+        .message.assistant p { margin-bottom: 12px; }
+        .message.assistant p:last-child { margin-bottom: 0; }
+        .message.assistant ul, .message.assistant ol { margin-left: 24px; margin-bottom: 12px; }
+        .message.assistant pre { background: #000; padding: 14px; border-radius: 8px; overflow-x: auto; border: 1px solid #334155; margin: 12px 0; }
+        .message.assistant code { font-family: 'Courier New', monospace; background: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; color: #38bdf8; }
+        .message.assistant pre code { background: transparent; padding: 0; color: #e2e8f0; }
+
+        /* Top-K Retrieval UI CSS */
+        .retrieval-details { margin-top: 16px; font-size: 0.85rem; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; border: 1px solid var(--border); animation: fadeIn 0.5s ease-in; }
+        .retrieval-details summary { cursor: pointer; color: var(--text-muted); font-weight: 600; outline: none; padding: 4px 0; }
+        .retrieval-details summary:hover { color: white; }
+        .retrieval-content { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+        .retrieval-item { background: rgba(255,255,255,0.03); padding: 12px; border-radius: 6px; border-left: 4px solid var(--primary); }
+        .retrieval-score { font-size: 0.75rem; color: #4ade80; margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .retrieval-item-text { font-family: 'Courier New', monospace; color: #94a3b8; font-size: 0.8rem; line-height: 1.4; }
+
+        .typing-indicator { display: none; align-self: flex-start; background: var(--msg-ai); padding: 12px 16px; border-radius: 12px; border-bottom-left-radius: 2px; border: 1px solid var(--border); }
+        .dot { height: 8px; width: 8px; background: var(--text-muted); border-radius: 50%; display: inline-block; margin: 0 2px; animation: jump 1.2s infinite ease-in-out; }
+        .dot:nth-child(1) { animation-delay: 0s; } .dot:nth-child(2) { animation-delay: 0.2s; } .dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes jump { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+
+        .chat-input-area { display: flex; gap: 10px; background: var(--sidebar-bg); padding: 10px; border-radius: 12px; border: 1px solid var(--border); }
+        .chat-input-area input { flex: 1; padding: 14px; border-radius: 8px; border: none; background: transparent; color: white; font-size: 1rem; outline: none; }
+        .chat-input-area button { padding: 12px 24px; }
+
+        .db-item { background: var(--sidebar-bg); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; padding: 20px; display: flex; gap: 24px; animation: fadeIn 0.5s ease-out; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .db-item img { width: 320px; height: 180px; object-fit: contain; border-radius: 8px; background: #000; border: 1px solid var(--border); flex-shrink: 0; }
+        .db-item-content { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+        .db-item h4 { color: var(--primary); margin-bottom: 10px; font-size: 1.1rem; }
+        
+        .db-context-formatted { font-size: 0.95rem; line-height: 1.6; color: #cbd5e1; margin-top: 8px; background: rgba(0,0,0,0.2); padding: 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
+        .db-context-formatted pre { background: #000; padding: 14px; border-radius: 8px; overflow-x: auto; border: 1px solid #334155; margin: 12px 0; }
+        .db-context-formatted code { font-family: 'Courier New', monospace; background: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; color: #38bdf8; }
+        .db-context-formatted pre code { background: transparent; padding: 0; color: #e2e8f0; }
+
+        .transcript-box { background: var(--sidebar-bg); padding: 24px; border-radius: 12px; white-space: pre-wrap; line-height: 1.7; color: #cbd5e1; border: 1px solid var(--border); }
+        .spinner { border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>🎥 Multimodal RAG</h2>
+        <div class="input-group">
+            <label>🔑 API Authentication</label>
+            <input type="password" id="apiKey" placeholder="Paste Gemini API Key">
+        </div>
+        <div class="input-group">
+            <label>📂 Upload Video (MP4)</label>
+            <input type="file" id="videoFile" accept="video/mp4">
+        </div>
+        
+        <label class="checkbox-group">
+            <input type="checkbox" id="forceReprocess"> Force Reprocess (Ignore Cache)
+        </label>
+
+        <button id="processBtn" onclick="processVideo()">
+            <div id="btnSpinner" class="spinner"></div>
+            <span id="btnText">Process Video</span>
+        </button>
+        
+        <label style="margin-top: 10px;">⚙️ Live Backend Status</label>
+        <div id="terminal" class="terminal-box">
+            <span>Awaiting instructions...</span>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('chat')">💬 Chat</div>
+            <div class="tab" onclick="switchTab('transcript')">📝 Transcript</div>
+            <div class="tab" onclick="switchTab('db')">🗄️ Database View</div>
+        </div>
+
+        <div id="chat" class="tab-content active">
+            <div class="chat-container" id="chatBox">
+                <div class="message assistant">Hello! Upload and process a video, then ask me anything about it.</div>
+            </div>
+            
+            <div id="typingIndicator" class="typing-indicator">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </div>
+
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="E.g., 'What is sir telling at 02:30?' or 'Where is the diagram?'" disabled>
+                <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+            </div>
+        </div>
+
+        <div id="transcript" class="tab-content">
+            <h2 style="margin-bottom: 20px;">Raw Audio Transcript</h2>
+            <div class="transcript-box" id="transcriptText">Transcript will appear here after processing.</div>
+        </div>
+
+        <div id="db" class="tab-content">
+            <h2 style="margin-bottom: 20px;">Vector Database Inspector</h2>
+            <div id="dbContainer">Database chunks will appear here.</div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        function safeImageUrl(path) {
+            if (!path) return '';
+            let cleanPath = path.replace(/\\/g, '/');
+            return cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath;
+        }
+
+        let logPollingInterval;
+
+        async function pollLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const logs = await response.json();
+                const terminal = document.getElementById('terminal');
+                terminal.innerHTML = '';
+                logs.forEach(log => { terminal.innerHTML += `<span>> ${log}</span>`; });
+                terminal.scrollTop = terminal.scrollHeight;
+            } catch (err) {}
+        }
+
+        async function processVideo() {
+            const apiKey = document.getElementById('apiKey').value;
+            const fileInput = document.getElementById('videoFile').files[0];
+            const forceReprocess = document.getElementById('forceReprocess').checked;
+
+            if (!apiKey || !fileInput) { alert("Please provide both API Key and Video."); return; }
+
+            document.getElementById('processBtn').disabled = true;
+            document.getElementById('btnText').innerText = "Processing...";
+            document.getElementById('btnSpinner').style.display = "block";
+            
+            const formData = new FormData();
+            formData.append('api_key', apiKey);
+            formData.append('video', fileInput);
+            formData.append('force_reprocess', forceReprocess);
+
+            logPollingInterval = setInterval(pollLogs, 1000);
+
+            try {
+                const response = await fetch('/api/process', { method: 'POST', body: formData });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('chatInput').disabled = false;
+                    document.getElementById('sendBtn').disabled = false;
+                    fetchState();
+                } else {
+                    alert("Error: " + result.error);
+                }
+            } catch (err) {
+                alert("An error occurred during processing.");
+            } finally {
+                clearInterval(logPollingInterval);
+                pollLogs();
+                document.getElementById('processBtn').disabled = false;
+                document.getElementById('btnText').innerText = "Process Complete";
+                document.getElementById('btnSpinner').style.display = "none";
+            }
+        }
+
+        async function sendMessage() {
+            const inputField = document.getElementById('chatInput');
+            const query = inputField.value.trim();
+            const apiKey = document.getElementById('apiKey').value;
+
+            if (!query) return;
+
+            appendUserMessage(query);
+            inputField.value = '';
+            inputField.disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            
+            const typingInd = document.getElementById('typingIndicator');
+            typingInd.style.display = 'block';
+            
+            const chatBox = document.getElementById('chatBox');
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey, query: query })
+                });
+                const result = await response.json();
+                typingInd.style.display = 'none';
+
+                if (response.ok) {
+                    await typeWriterAssistantMessage(result.answer, result.image, result.top_k);
+                } else {
+                    await typeWriterAssistantMessage("Error: " + result.error);
+                }
+            } catch (err) {
+                typingInd.style.display = 'none';
+                await typeWriterAssistantMessage("Network error failed to get response.");
+            } finally {
+                inputField.disabled = false;
+                document.getElementById('sendBtn').disabled = false;
+                inputField.focus();
+            }
+        }
+
+        function appendUserMessage(text) {
+            const chatBox = document.getElementById('chatBox');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message user`;
+            msgDiv.innerText = text;
+            chatBox.appendChild(msgDiv);
+        }
+
+        // Updated Typewriter to accept Top-K data and append the UI drawer
+        async function typeWriterAssistantMessage(text, imagePath = null, topKData = null) {
+            const chatBox = document.getElementById('chatBox');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message assistant`;
+            chatBox.appendChild(msgDiv);
+            
+            let currentText = "";
+            let currentIndex = 0;
+
+            return new Promise((resolve) => {
+                const interval = setInterval(() => {
+                    currentText += text.charAt(currentIndex);
+                    msgDiv.innerHTML = marked.parse(currentText);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                    currentIndex++;
+                    
+                    if (currentIndex >= text.length) {
+                        clearInterval(interval);
+                        
+                        if (window.MathJax) {
+                            MathJax.typesetPromise([msgDiv]).then(() => {
+                                chatBox.scrollTop = chatBox.scrollHeight;
+                            });
+                        }
+
+                        if (imagePath) {
+                            const img = document.createElement('img');
+                            img.src = safeImageUrl(imagePath);
+                            img.alt = "Context Frame";
+                            msgDiv.appendChild(img);
+                        }
+
+                        // Build Top-K Retrieval Drawer
+                        if (topKData && topKData.length > 0) {
+                            const detailsElement = document.createElement('details');
+                            detailsElement.className = 'retrieval-details';
+                            
+                            let contentHTML = `<summary>🔍 View Top-${topKData.length} Retrieved Contexts</summary><div class="retrieval-content">`;
+                            topKData.forEach((item, index) => {
+                                contentHTML += `
+                                    <div class="retrieval-item">
+                                        <div class="retrieval-score">Rank ${index + 1} | Time: ${item.time} | Score: ${item.score}</div>
+                                        <div class="retrieval-item-text">${item.context.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+                                    </div>`;
+                            });
+                            contentHTML += `</div>`;
+                            detailsElement.innerHTML = contentHTML;
+                            msgDiv.appendChild(detailsElement);
+                        }
+
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        resolve();
+                    }
+                }, 10);
+            });
+        }
+
+        async function fetchState() {
+            try {
+                const response = await fetch('/api/state');
+                const state = await response.json();
+
+                if (state.is_processed) {
+                    document.getElementById('transcriptText').innerText = state.transcript || "No speech detected.";
+                    
+                    const dbContainer = document.getElementById('dbContainer');
+                    dbContainer.innerHTML = '';
+                    
+                    state.vector_db.forEach(item => {
+                        const formattedContext = marked.parse(item.context);
+                        dbContainer.innerHTML += `
+                            <div class="db-item">
+                                <img src="${safeImageUrl(item.frame_path)}" alt="Frame">
+                                <div class="db-item-content">
+                                    <h4>Timestamp: ${item.time_str}</h4>
+                                    <strong>Context:</strong>
+                                    <div class="db-context-formatted">
+                                        ${formattedContext}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    if (window.MathJax) {
+                        MathJax.typesetPromise([dbContainer]).catch((err) => console.log(err));
+                    }
+                }
+            } catch (err) {}
+        }
+
+        document.getElementById('chatInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>
