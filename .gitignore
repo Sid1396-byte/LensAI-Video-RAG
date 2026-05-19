@@ -1,0 +1,17 @@
+# --- Python Junk ---
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# --- Your App's Temporary Files ---
+# We want these to exist on your computer, but NEVER on GitHub
+*.pkl
+frames/
+temp_video.mp4
+temp_audio.wav
+
+# --- System & IDE Files ---
+.DS_Store
+.deepeval/
+.env
