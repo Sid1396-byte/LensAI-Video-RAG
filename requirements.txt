@@ -1,0 +1,9 @@
+flask
+flask-cors
+google-genai
+opencv-python
+numpy
+openai-whisper
+scikit-learn
+deepeval
+pytest
